@@ -42,30 +42,72 @@ interface RawSheet {
   }>;
 }
 
-async function callOpenAI(body: Record<string, unknown>): Promise<{ json: unknown; model: string }> {
+export class TimeoutError extends Error {}
+
+// Remember which model worked so later calls skip models this account can't use.
+let workingModel: string | null = null;
+// Models that rejected the low-effort reasoning setting (older, non-reasoning models).
+const noReasoningParam = new Set<string>();
+
+async function callOpenAI(
+  body: Record<string, unknown>,
+  opts: { timeoutMs: number },
+): Promise<{ json: unknown; model: string }> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new MissingKeyError("OPENAI_API_KEY is not set");
+  const deadline = Date.now() + opts.timeoutMs;
+  const chain = workingModel ? [workingModel, ...modelChain().filter((m) => m !== workingModel)] : modelChain();
   let lastError = "No model available";
-  for (const model of modelChain()) {
-    const res = await fetch(API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, ...body }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const err = data?.error ?? {};
-      lastError = `${model}: ${err.message ?? res.statusText}`;
-      const modelProblem =
-        res.status === 404 || err.code === "model_not_found" || /model/i.test(err.param ?? "") || /does not exist|not supported|unsupported model/i.test(err.message ?? "");
-      if (modelProblem) continue; // try the next model
-      if (res.status === 401) throw new Error("OpenAI rejected the API key. Check OPENAI_API_KEY in your Vercel settings.");
-      if (res.status === 429) throw new Error("OpenAI rate limit or quota reached. Check your OpenAI billing, then try again.");
-      throw new Error(lastError);
+
+  for (const model of chain) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const remaining = deadline - Date.now();
+      if (remaining < 2000) throw new TimeoutError("timeout");
+      // Low reasoning effort keeps reading fast; a transcription doesn't need long thinking.
+      const useReasoning = !noReasoningParam.has(model) && !/^gpt-4/.test(model);
+      const payload: Record<string, unknown> = { model, max_output_tokens: 16000, ...body };
+      if (useReasoning) payload.reasoning = { effort: "low" };
+
+      let res: Response;
+      try {
+        res = await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(remaining),
+        });
+      } catch (e) {
+        if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) throw new TimeoutError("timeout");
+        throw e;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = data?.error ?? {};
+        const message: string = err.message ?? res.statusText;
+        lastError = `${model}: ${message}`;
+        if (useReasoning && res.status === 400 && /reasoning/i.test(`${err.param ?? ""} ${message}`)) {
+          noReasoningParam.add(model); // this model doesn't take the setting; retry without it
+          continue;
+        }
+        const modelProblem =
+          res.status === 404 ||
+          err.code === "model_not_found" ||
+          err.param === "model" ||
+          /does not exist|not supported|unsupported model|do not have access/i.test(message);
+        if (modelProblem) break; // try the next model
+        if (res.status === 401) throw new Error("OpenAI rejected the API key. Check OPENAI_API_KEY in your Vercel settings, then redeploy.");
+        if (res.status === 429)
+          throw new Error("OpenAI says you're over your rate limit or out of credit. Check billing at platform.openai.com, then try again.");
+        throw new Error(lastError);
+      }
+      const text = extractText(data);
+      if (!text) {
+        if (data?.status === "incomplete") throw new Error("The scoresheet was too long to read in one go. Try one page at a time.");
+        throw new Error(`${model} returned no text`);
+      }
+      workingModel = model;
+      return { json: JSON.parse(text), model };
     }
-    const text = extractText(data);
-    if (!text) throw new Error(`${model} returned no text`);
-    return { json: JSON.parse(text), model };
   }
   throw new Error(lastError);
 }
@@ -86,7 +128,7 @@ function imageParts(images: string[]) {
 }
 
 /** First pass: transcribe the whole sheet. */
-export async function readSheet(images: string[]): Promise<SheetReading> {
+export async function readSheet(images: string[], timeoutMs: number): Promise<SheetReading> {
   const { json, model } = await callOpenAI({
     instructions: READ_INSTRUCTIONS,
     input: [
@@ -99,7 +141,7 @@ export async function readSheet(images: string[]): Promise<SheetReading> {
       },
     ],
     text: { format: { type: "json_schema", name: "scoresheet", strict: true, schema: READ_SCHEMA } },
-  });
+  }, { timeoutMs });
   const sheet = json as RawSheet;
   return {
     white: sheet.white,
@@ -148,7 +190,7 @@ export interface VerifyQuestion {
 }
 
 /** Second pass: for doubtful moves, show the model the legal options and let it look again. */
-export async function verifyMoves(images: string[], questions: VerifyQuestion[]) {
+export async function verifyMoves(images: string[], questions: VerifyQuestion[], timeoutMs: number) {
   if (questions.length === 0) return [];
   const list = questions
     .map(
@@ -166,6 +208,6 @@ export async function verifyMoves(images: string[], questions: VerifyQuestion[])
       },
     ],
     text: { format: { type: "json_schema", name: "verification", strict: true, schema: VERIFY_SCHEMA } },
-  });
+  }, { timeoutMs });
   return (json as { choices: Array<{ ply: number; move: string; confident: boolean }> }).choices ?? [];
 }
