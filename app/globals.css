@@ -832,6 +832,19 @@ kbd {
   gap: 8px;
 }
 
+.pgn-text {
+  width: 100%;
+  min-height: 120px;
+  max-height: 220px;
+  resize: vertical;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-s);
+  padding: 10px 12px;
+  font: 0.9rem/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text);
+  background: #F7F9FC;
+}
+
 .train {
   border-top: 1px solid var(--rule);
   padding-top: 12px;
@@ -893,8 +906,13 @@ kbd {
 }
 
 .camera-guide {
+  /* portrait, shaped like a letter/A4 scoresheet */
   position: absolute;
-  inset: 8% 14%;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  aspect-ratio: 8.5 / 11;
+  height: min(68vh, 116vw);
   border: 2px solid rgba(255, 255, 255, 0.8);
   border-radius: 8px;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);

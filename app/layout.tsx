@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Scoresheet Scanner",
-  description: "Photograph or scan a handwritten chess scoresheet and get the game as board images and PGN.",
+  description: "Photograph or scan a handwritten chess scoresheet and get the game as a PGN.",
 };
 
 export const viewport: Viewport = {
