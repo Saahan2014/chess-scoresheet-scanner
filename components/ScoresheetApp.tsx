@@ -156,12 +156,29 @@ export default function ScoresheetApp() {
     try {
       const canvases = pages.map((p) => (cleanUp ? cleanUpScan(p.canvas) : p.canvas));
       const images = pagesToPayload(canvases);
-      const res = await fetch("/api/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images }),
-      });
-      const data = await res.json().catch(() => ({ error: `Server error (${res.status}).` }));
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 290_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/read", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ images }),
+          signal: controller.signal,
+        });
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError")
+          throw new Error("Reading took too long and was stopped. Try again, or crop the photo to just the move columns.");
+        throw new Error("Couldn't reach the server. Check your internet connection and try again.");
+      } finally {
+        clearTimeout(timer);
+      }
+      const data = await res.json().catch(() => ({
+        error:
+          res.status === 504
+            ? "The server ran out of time reading this sheet. Try again, or crop the photo to just the move columns."
+            : `Server error (${res.status}). Try again in a moment.`,
+      }));
       if (!res.ok) throw new Error(data.error || `Server error (${res.status}).`);
       setSentImages(images);
       loadReading(data, { model: data.model, verified: data.verified ?? 0 });
@@ -540,9 +557,13 @@ export default function ScoresheetApp() {
                     </button>
                   )}
                   <button className="btn btn-primary btn-wide" onClick={read} disabled={phase === "reading"}>
-                    {phase === "reading" ? (elapsed < 14 ? "Reading handwriting…" : "Double-checking unclear moves…") : "Read scoresheet"}
+                    {phase === "reading" ? readingLabel(elapsed) : "Read scoresheet"}
                   </button>
-                  {phase === "reading" && <p className="hint">Usually 15–60 seconds. {elapsed}s so far.</p>}
+                  {phase === "reading" && (
+                    <p className="hint">
+                      Usually under a minute; long games can take up to 3. {elapsed}s so far.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -856,6 +877,12 @@ function BlankSheet({ onClick }: { onClick: () => void }) {
       </span>
     </button>
   );
+}
+
+function readingLabel(seconds: number) {
+  if (seconds < 45) return "Reading handwriting…";
+  if (seconds < 100) return "Still reading — long games take longer…";
+  return "Checking unclear moves…";
 }
 
 function showWritten(p: DecodedPly) {
