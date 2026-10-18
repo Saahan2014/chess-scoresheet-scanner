@@ -64,7 +64,7 @@ async function callOpenAI(
       const remaining = deadline - Date.now();
       if (remaining < 2000) throw new TimeoutError("timeout");
       // Low reasoning effort keeps reading fast; a transcription doesn't need long thinking.
-      const useReasoning = !noReasoningParam.has(model) && !/^gpt-4/.test(model);
+      const useReasoning = !noReasoningParam.has(model) && !/^(ft:)?gpt-4/.test(model);
       const payload: Record<string, unknown> = { model, max_output_tokens: 16000, ...body };
       if (useReasoning) payload.reasoning = { effort: "low" };
 
