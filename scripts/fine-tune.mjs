@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Train an OpenAI vision model on your own scoresheets.
 //
-// 1. On the website, after checking a game's moves, click "Save as training example".
-//    Put the downloaded .jsonl files in one folder (aim for 10+; 50+ is much better).
+// Easiest: use the Train page on your site. This script does the same from a terminal.
+//
+// 1. On the Train page, click "Download all as one file" and put it in a folder.
 // 2. Run:  OPENAI_API_KEY=sk-... npm run fine-tune -- ./training
 // 3. When the job finishes, set OPENAI_MODEL in Vercel to the model id it prints, and redeploy.
 //
@@ -12,7 +13,7 @@ import { join } from "node:path";
 
 const dir = process.argv[2];
 const key = process.env.OPENAI_API_KEY;
-const base = process.env.FT_BASE_MODEL || "gpt-4.1-2025-04-14";
+const base = process.env.FT_BASE_MODEL || "gpt-4o-2024-08-06"; // the model OpenAI can fine-tune on images
 if (!dir || !key) {
   console.error("Usage: OPENAI_API_KEY=sk-... npm run fine-tune -- <folder-with-jsonl-files>");
   process.exit(1);
