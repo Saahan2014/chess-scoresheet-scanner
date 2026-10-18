@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
 import CameraCapture from "./CameraCapture";
+import SiteHeader from "./SiteHeader";
 import { decodeGame, normalizeResult, toPgn, type DecodeResult, type DecodedPly, type RawPly } from "@/lib/decoder";
 import {
   canvasToPage,
@@ -16,6 +17,7 @@ import {
 import { canvasToBlob, downloadBlob, renderBoard, THEMES } from "@/lib/board-png";
 import { buildTrainingExample, type HeaderInfo } from "@/lib/training";
 import { SAMPLE } from "@/lib/sample";
+import { saveExample } from "@/lib/training-store";
 
 type Phase = "idle" | "reading" | "done";
 type ThemeName = keyof typeof THEMES;
@@ -47,6 +49,7 @@ export default function ScoresheetApp() {
   const [decoded, setDecoded] = useState<DecodeResult | null>(null);
   const [decoding, setDecoding] = useState(false);
   const [cur, setCur] = useState(-1); // -1 = starting position
+  const [savedCount, setSavedCount] = useState<number | null>(null);
 
   const [size, setSize] = useState(800);
   const [theme, setTheme] = useState<ThemeName>("club");
@@ -203,6 +206,7 @@ export default function ScoresheetApp() {
       language: data.language ?? "",
     });
     setModelInfo(info);
+    setSavedCount(null);
     setPinned({});
     setDecoded(null);
     setPhase("done");
@@ -376,11 +380,17 @@ export default function ScoresheetApp() {
     flash("PGN copied");
   };
 
-  const saveTraining = () => {
+  const saveTraining = async () => {
     if (!sentImages.length || !decoded) return;
     const line = buildTrainingExample(sentImages, plies, headers);
-    downloadBlob(new Blob([line], { type: "application/jsonl" }), `training-${Date.now()}.jsonl`);
-    flash("Training example saved");
+    const names = [headers.white, headers.black].filter(Boolean).join(" – ");
+    try {
+      const n = await saveExample({ title: names || "Untitled game", plies: plies.length, line });
+      setSavedCount(n);
+      flash(`Saved. You have ${n} training sheet${n === 1 ? "" : "s"}.`);
+    } catch {
+      setError("This browser blocked saving. Try a different browser, or turn off private browsing.");
+    }
   };
 
   const pick = (index: number, san: string) => {
@@ -421,21 +431,13 @@ export default function ScoresheetApp() {
 
   return (
     <div className="page">
-      <header className="masthead">
-        <div className="brand">
-          <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-            <rect x="1" y="1" width="26" height="26" rx="3" fill="none" stroke="currentColor" strokeWidth="2" />
-            <rect x="1" y="1" width="13" height="13" fill="currentColor" />
-            <rect x="14" y="14" width="13" height="13" fill="currentColor" />
-          </svg>
-          <span>Scoresheet Scanner</span>
-        </div>
+      <SiteHeader current="scan">
         {phase === "done" && (
           <button className="btn btn-quiet" onClick={startOver}>
             Scan another sheet
           </button>
         )}
-      </header>
+      </SiteHeader>
 
       {phase !== "done" && (
         <main className="intake">
@@ -785,13 +787,18 @@ export default function ScoresheetApp() {
                 <div className="train">
                   <h2>Teach it your handwriting</h2>
                   <p>
-                    Once every move is right, save this sheet as a training example. With 10 or more, you can fine-tune the AI on
-                    your own handwriting (see the README).
+                    Once every move is right, save this sheet for training. With 10 or more saved, you can train the AI on
+                    handwriting like this from the <a href="/train">Train</a> page.
                   </p>
-                  <button className="btn" onClick={saveTraining} disabled={counts.unsure > 0} title={counts.unsure > 0 ? "Check the yellow moves first" : undefined}>
-                    Save as training example
+                  <button className="btn" onClick={saveTraining} disabled={counts.unsure > 0 || savedCount !== null} title={counts.unsure > 0 ? "Check the yellow moves first" : undefined}>
+                    {savedCount !== null ? "Saved for training" : "Save for training"}
                   </button>
                   {counts.unsure > 0 && <small>Check the yellow moves first.</small>}
+                  {savedCount !== null && (
+                    <small>
+                      {savedCount} saved so far. <a href="/train">Go to Train</a>
+                    </small>
+                  )}
                 </div>
               )}
               {modelInfo && (
