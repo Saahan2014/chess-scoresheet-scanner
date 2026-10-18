@@ -10,14 +10,20 @@ Turn a handwritten chess scoresheet into a game: take a photo, scan a PDF or pas
 4. **Second look.** Moves that are still doubtful go back to the model with the list of legal moves in that position, so it can look at the cell again and choose.
 5. **You review.** Corrected moves are underlined in red, unsure ones are highlighted in yellow. Click any move to pick a different legal move; everything after it is rechecked.
 
-## Training it on your handwriting
+## Training it on messy handwriting
 
-The decoding above works without any training. To make the AI itself better at a particular person's (or club's) handwriting, fine-tune it:
+The chess-rule decoding works without any training. To make the AI itself better at reading messy handwriting, train it on sheets you've corrected:
 
-1. Read a sheet, fix any mistakes, then click **Save as training example**. Each click downloads one `.jsonl` file.
-2. Collect at least 10 (50+ works much better) in a folder, e.g. `training/`.
-3. Run `OPENAI_API_KEY=sk-... npm run fine-tune -- ./training`. It uploads the examples, starts an OpenAI vision fine-tuning job and prints the new model id when finished.
-4. In Vercel, set `OPENAI_MODEL` to that id and redeploy.
+1. On the **Scan** page, read a sheet, fix any yellow moves, then click **Save for training**. Sheets are kept in your browser.
+2. In Vercel, add an environment variable `TRAIN_PASSWORD` (any password you choose) and redeploy. It stops visitors from spending your OpenAI credit.
+3. On the **Train** page, enter the password, click **Check OpenAI access**, then **Start training** (10 sheets minimum; 50+ is much better).
+4. When training finishes, the page shows your new model's name. Set `OPENAI_MODEL` to it in Vercel and redeploy.
+
+Training uses OpenAI fine-tuning on `gpt-4o-2024-08-06`, the model OpenAI can train on images. OpenAI has closed fine-tuning to new accounts, so the Check button tells you whether yours can use it.
+
+## Measuring accuracy
+
+The **Accuracy test** page reads random sheets from the public [HSSSD dataset](https://huggingface.co/datasets/BenjaminKost/HSSSD) (228 real tournament scoresheets) and reports how many moves were read correctly, with and without the chess-rule checker. Run it before and after training to compare.
 
 ## Setup
 
@@ -26,7 +32,9 @@ Environment variables (Vercel → Project → Settings → Environment Variables
 | Name | Required | What it does |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | yes | Your OpenAI API key |
-| `OPENAI_MODEL` | no | Model that reads the sheets. Defaults to `gpt-6.1-sol` and falls back to other models automatically if that one isn't available on your account. |
+| `OPENAI_MODEL` | no | Model that reads the sheets. Defaults to `gpt-6.1-sol` and falls back to other models automatically if that one isn't available on your account. Set it to your trained model's name after training. |
+| `TRAIN_PASSWORD` | for training | Password for the Train page |
+| `FT_BASE_MODEL` | no | Model to fine-tune. Defaults to `gpt-4o-2024-08-06` |
 
 Run locally:
 
