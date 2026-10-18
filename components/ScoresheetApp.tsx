@@ -443,11 +443,11 @@ export default function ScoresheetApp() {
             <h1>
               Snap a scoresheet.
               <br />
-              Get the board.
+              Get the PGN.
             </h1>
             <p className="lede">
               Photograph, scan or screenshot a handwritten chess scoresheet. The moves are read by AI, then checked
-              against the rules of chess so scrawled moves get fixed, and you can download any position as a PNG.
+              against the rules of chess so scrawled moves get fixed. You get the game as a PGN for any chess app or site.
             </p>
 
             <div className="actions" role="group" aria-label="Add a scoresheet">
@@ -719,7 +719,21 @@ export default function ScoresheetApp() {
             )}
 
             <div className="export">
-              <h2>Board image</h2>
+              <h2>Game (PGN)</h2>
+              <textarea className="pgn-text" readOnly value={pgn} aria-label="PGN of the game" onFocus={(e) => e.currentTarget.select()} />
+              <div className="export-actions">
+                <button className="btn btn-primary" onClick={downloadPgn}>
+                  Download PGN
+                </button>
+                <button className="btn" onClick={copyPgn}>
+                  Copy PGN
+                </button>
+                <a className="btn btn-quiet" href={`https://lichess.org/analysis/standard/${fen.replace(/ /g, "_")}`} target="_blank" rel="noreferrer">
+                  Open position in Lichess
+                </a>
+              </div>
+
+              <h2>Board picture (PNG)</h2>
               <div className="export-grid">
                 <label className="field">
                   <span>Size</span>
@@ -756,7 +770,7 @@ export default function ScoresheetApp() {
                 </label>
               </div>
               <div className="export-actions">
-                <button className="btn btn-primary" onClick={downloadPng}>
+                <button className="btn" onClick={downloadPng}>
                   Download PNG
                 </button>
                 <button className="btn" onClick={copyPng}>
@@ -765,19 +779,6 @@ export default function ScoresheetApp() {
                 <button className="btn btn-quiet" onClick={downloadAllPngs}>
                   Download every position
                 </button>
-              </div>
-
-              <h2>Game</h2>
-              <div className="export-actions">
-                <button className="btn" onClick={downloadPgn}>
-                  Download PGN
-                </button>
-                <button className="btn" onClick={copyPgn}>
-                  Copy PGN
-                </button>
-                <a className="btn btn-quiet" href={`https://lichess.org/analysis/standard/${fen.replace(/ /g, "_")}`} target="_blank" rel="noreferrer">
-                  Open position in Lichess
-                </a>
               </div>
 
               {sentImages.length > 0 && (
